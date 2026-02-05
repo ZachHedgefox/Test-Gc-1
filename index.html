@@ -14,16 +14,34 @@
         }
         .message {
             margin-bottom: 5px;
-            padding: 5px;
-            background-color: #f0f0f0;
+            padding: 8px;
             border-radius: 5px;
+            max-width: 80%;
+        }
+        .message:nth-child(even) {
+            background-color: #f0f0f0;
+        }
+        .message:nth-child(odd) {
+            background-color: #e0e0e0;
+        }
+        .username {
+            font-weight: bold;
+        }
+        .timestamp {
+            font-size: 0.8em;
+            color: #666;
         }
         #message-input {
-            width: 70%;
+            width: 60%;
+            padding: 5px;
+        }
+        #username-input {
+            width: 20%;
             padding: 5px;
         }
         button {
             padding: 5px 10px;
+            margin-left: 5px;
         }
     </style>
     <!-- Firebase SDKs -->
@@ -36,6 +54,8 @@
     <input type="text" id="username-input" placeholder="Your username" value="User">
     <input type="text" id="message-input" placeholder="Type your message...">
     <button onclick="sendMessage()">Send</button>
+    <button onclick="showEmojiPicker()">😀</button>
+    <button onclick="clearChat()">Clear Chat</button>
 
     <script>
         // Your Firebase config (paste from Firebase console)
@@ -51,31 +71,55 @@
         // Initialize Firebase
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore(app);
-        const messagesRef = db.collection('messages'); // Firestore collection for messages
+        const messagesRef = db.collection('messages');
 
-        // Listen for real-time updates
+        // Load saved username
+        const usernameInput = document.getElementById('username-input');
+        const savedUsername = localStorage.getItem('chatUsername');
+        if (savedUsername) usernameInput.value = savedUsername;
+
+        // Save username on change
+        usernameInput.addEventListener('input', () => {
+            localStorage.setItem('chatUsername', usernameInput.value.trim() || 'User');
+        });
+
+        // Color hash for usernames
+        function getColorForUsername(username) {
+            let hash = 0;
+            for (let i = 0; i < username.length; i++) {
+                hash = username.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            return `hsl(${hash % 360}, 70%, 50%)`;
+        }
+
+        // Real-time listener
         messagesRef.orderBy('timestamp').onSnapshot(snapshot => {
             const chatWindow = document.getElementById('chat-window');
-            chatWindow.innerHTML = ''; // Clear and rebuild (simple for demo; optimize for prod)
+            chatWindow.innerHTML = '';
             snapshot.forEach(doc => {
                 const data = doc.data();
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('message');
-                messageDiv.innerHTML = `<strong>${data.username}:</strong> ${data.text} <small>(${new Date(data.timestamp).toLocaleTimeString()})</small>`;
+                const color = getColorForUsername(data.username);
+                messageDiv.innerHTML = `
+                    <span class="username" style="color: ${color};">${data.username}:</span> ${data.text}
+                    <span class="timestamp">(${new Date(data.timestamp).toLocaleTimeString()})</span>
+                `;
                 chatWindow.appendChild(messageDiv);
             });
-            chatWindow.scrollTop = chatWindow.scrollHeight; // Scroll to bottom
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }, error => {
+            console.error('Snapshot error:', error);
+            alert('Error loading messages: ' + error.message);
         });
 
         function sendMessage() {
             const messageInput = document.getElementById('message-input');
-            const usernameInput = document.getElementById('username-input');
             const messageText = messageInput.value.trim();
             const username = usernameInput.value.trim() || 'Anonymous';
 
             if (messageText === '') return;
 
-            // Send to Firestore
             messagesRef.add({
                 username: username,
                 text: messageText,
@@ -83,13 +127,32 @@
             }).then(() => {
                 messageInput.value = '';
                 messageInput.focus();
-            }).catch(error => console.error('Error sending message:', error));
+            }).catch(error => {
+                console.error('Send error:', error);
+                alert('Error sending message: ' + error.message);
+            });
         }
 
-        // Enter key support
+        // Enter key
         document.getElementById('message-input').addEventListener('keydown', event => {
             if (event.key === 'Enter') sendMessage();
         });
+
+        // Emoji picker (uses browser native if available)
+        function showEmojiPicker() {
+            const messageInput = document.getElementById('message-input');
+            messageInput.focus();
+            if ('EmojiPicker' in window) { // Future-proof, but most browsers support via OS
+                // Trigger native picker if possible
+            } else {
+                alert('Use your device emoji keyboard!');
+            }
+        }
+
+        // Clear local chat view (not DB)
+        function clearChat() {
+            document.getElementById('chat-window').innerHTML = '';
+        }
     </script>
 </body>
 </html>
